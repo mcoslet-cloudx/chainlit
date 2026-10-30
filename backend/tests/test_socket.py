@@ -8,7 +8,9 @@ from chainlit.socket import (
     _authenticate_connection,
     _get_token,
     _get_token_from_cookie,
+    _is_origin_allowed,
     clean_session,
+    connect,
     connection_successful,
     load_user_env,
     persist_user_session,
@@ -628,3 +630,59 @@ class TestConnectionSuccessfulIdempotency:
             await connection_successful("sid-1")
 
         assert on_chat_start.call_count == 1
+
+
+class TestWebsocketOriginCheck:
+    """Websocket connections are checked against `allow_origins`."""
+
+    @staticmethod
+    def _config(allow_origins):
+        mock_config = Mock()
+        mock_config.project.allow_origins = allow_origins
+        return mock_config
+
+    @pytest.mark.parametrize(
+        ("allow_origins", "environ", "expected"),
+        [
+            # Wildcard keeps the previous behaviour: everything is accepted.
+            (["*"], {"HTTP_ORIGIN": "https://evil.example.com"}, True),
+            (
+                ["https://wms.example.com"],
+                {"HTTP_ORIGIN": "https://wms.example.com"},
+                True,
+            ),
+            (
+                ["https://wms.example.com"],
+                {"HTTP_ORIGIN": "https://evil.example.com", "HTTP_HOST": "app"},
+                False,
+            ),
+            # The app's own UI is same-origin.
+            (
+                ["https://wms.example.com"],
+                {
+                    "HTTP_ORIGIN": "https://chainlit.example.com",
+                    "HTTP_HOST": "chainlit.example.com",
+                },
+                True,
+            ),
+            # Non-browser clients send no Origin header.
+            (["https://wms.example.com"], {}, True),
+        ],
+    )
+    def test_is_origin_allowed(self, allow_origins, environ, expected):
+        with patch("chainlit.socket.config", self._config(allow_origins)):
+            assert _is_origin_allowed(environ) is expected
+
+    @pytest.mark.asyncio
+    async def test_connect_rejects_disallowed_origin(self):
+        environ = {"HTTP_ORIGIN": "https://evil.example.com", "HTTP_HOST": "app"}
+        auth = {"sessionId": "s", "clientType": "webapp"}
+
+        with (
+            patch("chainlit.socket.config", self._config(["https://wms.example.com"])),
+            patch("chainlit.socket.require_login") as require_login,
+            pytest.raises(ConnectionRefusedError, match="origin not allowed"),
+        ):
+            await connect("sid", environ, auth)
+
+        require_login.assert_not_called()

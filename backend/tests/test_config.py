@@ -635,3 +635,48 @@ class TestStdioMcpServerEnv:
 
         restored = StdioMcpServer.model_validate(dumped)
         assert restored.env == {"GITHUB_TOKEN": "abc123"}
+
+
+class TestAllowOriginsEnvOverride:
+    """CHAINLIT_ALLOW_ORIGINS overrides `allow_origins` from config.toml."""
+
+    @staticmethod
+    def _load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        config_toml = tmp_path / "config.toml"
+        config_toml.write_text(
+            f"""
+[project]
+allow_origins = ["https://from-toml.example.com"]
+
+[UI]
+name = "Assistant"
+
+[meta]
+generated_by = "{__version__}"
+""",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(chainlit_config, "config_file", str(config_toml))
+        return chainlit_config.load_settings()
+
+    def test_toml_value_used_without_env(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.delenv("CHAINLIT_ALLOW_ORIGINS", raising=False)
+
+        settings = self._load(tmp_path, monkeypatch)
+
+        assert settings["project"].allow_origins == ["https://from-toml.example.com"]
+
+    def test_env_overrides_toml(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv(
+            "CHAINLIT_ALLOW_ORIGINS",
+            " https://wms.example.com , http://localhost:5500,",
+        )
+
+        settings = self._load(tmp_path, monkeypatch)
+
+        assert settings["project"].allow_origins == [
+            "https://wms.example.com",
+            "http://localhost:5500",
+        ]

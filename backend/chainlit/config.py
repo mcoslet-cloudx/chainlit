@@ -88,7 +88,8 @@ persist_user_env = false
 # Set to true to show API keys as ***, false to show them as plain text
 mask_user_env = false
 
-# Authorized origins
+# Authorized origins (HTTP CORS and websocket connections)
+# Can be overridden with the comma-separated CHAINLIT_ALLOW_ORIGINS env variable
 allow_origins = ["*"]
 
 [features]
@@ -810,6 +811,15 @@ def load_settings():
         _check_legacy_mcp_config(features_settings)
 
         lc_cache_path = os.path.join(config_dir, ".langchain.db")
+
+        # Comma-separated origins, e.g. per deployment environment; overrides
+        # `allow_origins` from config.toml when set.
+        if allow_origins_env := os.environ.get("CHAINLIT_ALLOW_ORIGINS"):
+            project_config["allow_origins"] = [
+                origin.strip()
+                for origin in allow_origins_env.split(",")
+                if origin.strip()
+            ]
 
         project_settings = ProjectSettings(
             lc_cache_path=lc_cache_path,

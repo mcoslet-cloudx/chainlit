@@ -1,24 +1,15 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 
-type Theme = 'dark' | 'light' | 'system';
+import {
+  type Theme,
+  ThemeProviderContext
+} from '@chainlit/app/src/components/ThemeProvider';
 
 type ThemeProviderProps = {
   children: React.ReactNode;
   defaultTheme?: Theme;
   storageKey?: string;
 };
-
-type ThemeProviderState = {
-  theme: Theme;
-  setTheme: (theme: Theme) => void;
-};
-
-const initialState: ThemeProviderState = {
-  theme: 'system',
-  setTheme: () => null
-};
-
-const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 
 function applyThemeVariables(variant: 'dark' | 'light') {
   if (!window.theme) return;

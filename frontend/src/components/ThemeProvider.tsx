@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 
-type Theme = 'dark' | 'light' | 'system';
+export type Theme = 'dark' | 'light' | 'system';
 
 type ThemeProviderProps = {
   children: React.ReactNode;
@@ -8,7 +8,7 @@ type ThemeProviderProps = {
   storageKey?: string;
 };
 
-type ThemeProviderState = {
+export type ThemeProviderState = {
   theme: Theme;
   setTheme: (theme: Theme) => void;
 };
@@ -18,7 +18,10 @@ const initialState: ThemeProviderState = {
   setTheme: () => null
 };
 
-const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
+// Exported so the copilot's own ThemeProvider can provide this same context:
+// shared components (e.g. Logo) read the theme through this module's useTheme.
+export const ThemeProviderContext =
+  createContext<ThemeProviderState>(initialState);
 
 function applyThemeVariables(variant: 'dark' | 'light') {
   if (!window.theme) return;

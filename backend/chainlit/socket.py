@@ -1,7 +1,7 @@
 import asyncio
 import json
 from typing import Any, Dict, Literal, Optional, Tuple, TypedDict, Union
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
 
 from starlette.requests import cookie_parser
 from typing_extensions import TypeAlias
@@ -118,6 +118,25 @@ def load_user_env(user_env):
     return user_env_dict
 
 
+def _is_origin_allowed(environ: WSGIEnvironment) -> bool:
+    """Check the websocket Origin header against `allow_origins`.
+
+    Browsers do not apply CORS to websockets, so this is the only guard against
+    other sites opening a connection with the user's cookies.
+    """
+    origin = environ.get("HTTP_ORIGIN")
+    if not origin:
+        # Non-browser clients don't send an Origin header.
+        return True
+
+    allow_origins = config.project.allow_origins
+    if "*" in allow_origins or origin in allow_origins:
+        return True
+
+    # The app's own UI is always allowed.
+    return urlparse(origin).netloc == environ.get("HTTP_HOST")
+
+
 def _get_token_from_cookie(environ: WSGIEnvironment) -> Optional[str]:
     if cookie_header := environ.get("HTTP_COOKIE", None):
         cookies = cookie_parser(cookie_header)
@@ -147,6 +166,10 @@ async def connect(sid: str, environ: WSGIEnvironment, auth: WebSocketSessionAuth
     user: User | PersistedUser | None = None
     token: str | None = None
     thread_id = auth.get("threadId", None)
+
+    if not _is_origin_allowed(environ):
+        logger.error("Websocket origin not allowed: %s", environ.get("HTTP_ORIGIN"))
+        raise ConnectionRefusedError("origin not allowed")
 
     if require_login():
         try:
